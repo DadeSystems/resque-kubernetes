@@ -90,12 +90,19 @@ module Resque
       end
 
       def jobs_maxed?(name, namespace)
+        if @_cache && ((Time.now.to_i - @_cache) < 5)
+          return true
+        end
+
+        @_cache = Time.now.to_i
+
         resque_jobs = jobs_client.get_jobs(
             label_selector: "resque-kubernetes=job,resque-kubernetes-group=#{name}",
             namespace:      namespace
         )
-        running = resque_jobs.reject { |job| job.spec.completions == job.status.succeeded }
-        running.size >= owner.max_workers
+        jobs = resque_jobs.reject { |job| job.spec.completions == job.status.succeeded }
+
+        jobs.size >= owner.max_workers
       end
     end
   end

@@ -90,7 +90,7 @@ module Resque
       end
 
       def jobs_maxed?(name, namespace)
-        if @_cache && ((Time.now.to_i - @_cache) < 5)
+        if (owner.max_workers == 1) && @_cache && ((Time.now.to_i - @_cache) < 5)
           return true
         end
 

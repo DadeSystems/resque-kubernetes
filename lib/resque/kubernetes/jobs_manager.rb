@@ -8,6 +8,8 @@ module Resque
   module Kubernetes
     # Spins up Kubernetes Jobs to run Resque workers.
     class JobsManager
+      include Singleton
+
       MAXED_CACHE_IN_SECONDS = 30
 
       include Resque::Kubernetes::ManifestConformance

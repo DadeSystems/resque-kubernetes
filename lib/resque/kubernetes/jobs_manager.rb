@@ -8,6 +8,8 @@ module Resque
   module Kubernetes
     # Spins up Kubernetes Jobs to run Resque workers.
     class JobsManager
+      MAXED_CACHE_IN_SECONDS = 30
+
       include Resque::Kubernetes::ManifestConformance
 
       attr_reader :owner
@@ -42,8 +44,17 @@ module Resque
         manifest = DeepHash.new.merge!(owner.job_manifest)
         ensure_namespace(manifest)
 
+        if @_cache && ((Time.now.to_i - @_cache) < MAXED_CACHE_IN_SECONDS)
+          return
+        end
+
         # Do not start job if we have reached our maximum count
-        return if jobs_maxed?(manifest["metadata"]["name"], manifest["metadata"]["namespace"])
+        @_maxed = jobs_maxed?(manifest["metadata"]["name"], manifest["metadata"]["namespace"])
+
+        if @_maxed
+          return
+          @_cache = Time.now.to_i
+        end
 
         adjust_manifest(manifest)
 
@@ -90,19 +101,13 @@ module Resque
       end
 
       def jobs_maxed?(name, namespace)
-        if (owner.max_workers == 1) && @_cache && ((Time.now.to_i - @_cache) < 5)
-          return true
-        end
-
-        @_cache = Time.now.to_i
-
         resque_jobs = jobs_client.get_jobs(
             label_selector: "resque-kubernetes=job,resque-kubernetes-group=#{name}",
             namespace:      namespace
         )
-        jobs = resque_jobs.reject { |job| job.spec.completions == job.status.succeeded }
+        running = resque_jobs.reject { |job| job.spec.completions == job.status.succeeded }
 
-        jobs.size >= owner.max_workers
+        running.size >= owner.max_workers
       end
     end
   end
